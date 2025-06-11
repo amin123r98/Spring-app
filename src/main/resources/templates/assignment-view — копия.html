@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${assignment != null ? assignment.title : 'Задание'}">Задание</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { padding-top: 5rem; }
+        .breadcrumb-nav { margin-bottom: 1.5rem; }
+        .assignment-description { margin-top: 1rem; padding: 1.5rem; background-color: #f8f9fa; border-radius: 0.3rem; }
+        .submission-form { margin-top: 2rem; }
+        .previous-submission { margin-top: 2rem; border: 1px solid #dee2e6; padding: 1rem; border-radius: .25rem; background-color: #f0f0f0;}
+        .previous-submission dt { font-weight: bold; }
+        .file-link { word-break: break-all; } /* Чтобы длинные имена файлов переносились */
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top" th:replace="~{course-list :: navbar}"></nav>
+
+<main class="container" th:if="${assignment}">
+
+    <nav aria-label="breadcrumb" class="breadcrumb-nav mt-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a th:href="@{/}">Главная</a></li>
+            <li class="breadcrumb-item"><a th:href="@{/courses}">Курсы</a></li>
+            <li class="breadcrumb-item" th:if="${course}"><a th:href="@{/courses/{id}(id=${course.id})}" th:text="${course.title}">Курс</a></li>
+            <li class="breadcrumb-item" th:if="${lesson}"><a th:href="@{/lessons/{id}(id=${lesson.id})}" th:text="${lesson.title}">Урок</a></li>
+            <li class="breadcrumb-item active" aria-current="page" th:text="${assignment.title}">Задание</li>
+        </ol>
+    </nav>
+
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <h1 th:text="${assignment.title}">Название задания</h1>
+    <span class="badge"
+          th:classappend="${assignment.assignmentType.name() == 'QUIZ' ? 'bg-primary' :
+                            assignment.assignmentType.name() == 'PRACTICAL_WORK_TEXT' ? 'bg-info text-dark' :
+                            assignment.assignmentType.name() == 'PRACTICAL_WORK_UPLOAD' ? 'bg-success' : 'bg-secondary'}"
+          th:text="${#strings.replace(assignment.assignmentType.name(), '_', ' ')}">Тип задания</span>
+    <hr>
+    <div class="assignment-description">
+        <strong>Описание задания:</strong>
+        <p th:text="${assignment.description}">Описание задания...</p>
+    </div>
+
+    <div th:if="${previousResult != null}" class="previous-submission">
+        <h4>Ваша предыдущая попытка</h4>
+        <dl class="row">
+            <dt class="col-sm-3">Дата отправки:</dt>
+            <dd class="col-sm-9" th:text="${#temporals.format(previousResult.submittedAt, 'dd.MM.yyyy HH:mm')}">Дата</dd>
+
+            <dt class="col-sm-3">Оценка:</dt>
+            <dd class="col-sm-9" th:if="${previousResult.grade != null}" th:text="${previousResult.grade} + ' баллов'">Баллы</dd>
+            <dd class="col-sm-9" th:if="${previousResult.grade == null}">Еще не проверено</dd>
+
+            <dt class="col-sm-3" th:if="${assignment.assignmentType.name() == 'PRACTICAL_WORK_TEXT'}">Ваш ответ:</dt>
+            <dd class="col-sm-9" th:if="${assignment.assignmentType.name() == 'PRACTICAL_WORK_TEXT'}">
+                <pre><code th:text="${previousResult.answer}">Текст ответа</code></pre>
+            </dd>
+
+            <dt class="col-sm-3" th:if="${assignment.assignmentType.name() == 'PRACTICAL_WORK_UPLOAD'}">Загруженный файл:</dt>
+            <dd class="col-sm-9 file-link" th:if="${assignment.assignmentType.name() == 'PRACTICAL_WORK_UPLOAD'}">
+                <span th:text="${previousResult.answer ?: 'Файл не отправлялся'}">Имя файла</span>
+            </dd>
+        </dl>
+        <div sec:authorize="hasRole('ROLE_ADMIN')" class="mt-2">
+            <form th:action="@{/assignments/{id}/grade(id=${assignment.id})}" method="post" class="row g-2 align-items-center">
+                <input type="hidden" name="resultId" th:value="${previousResult.id}" />
+                <div class="col-auto">
+                    <label for="gradeInput" class="visually-hidden">Оценка</label>
+                    <input type="number" class="form-control form-control-sm" id="gradeInput" name="grade" placeholder="Баллы" min="0" max="100" th:value="${previousResult.grade}">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Оценить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="submission-form">
+        <h3>Отправить ответ</h3>
+        <form th:action="@{/assignments/{id}/submit(id=${assignment.id})}"
+              th:object="${userAnswer}"
+              method="post"
+              enctype="multipart/form-data"> <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+
+            <div th:if="${assignment.assignmentType.name() == 'PRACTICAL_WORK_TEXT'}">
+                <div class="mb-3">
+                    <label for="textAnswer" class="form-label">Ваш ответ:</label>
+                    <textarea class="form-control" id="textAnswer" name="textAnswer" rows="8" th:field="*{textAnswer}"
+                              th:placeholder="${previousResult != null ? 'Введите новый ответ, если хотите пересдать' : 'Введите ваш ответ здесь...'}"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span th:text="${previousResult != null ? 'Отправить повторно' : 'Отправить ответ'}"></span>
+                </button>
+            </div>
+
+            <div th:if="${assignment.assignmentType.name() == 'PRACTICAL_WORK_UPLOAD'}">
+                <div class="mb-3">
+                    <label for="fileUpload" class="form-label">Выберите файл для загрузки:</label>
+                    <input class="form-control" type="file" id="fileUpload" name="file"> <div class="form-text">Максимальный размер файла: (уточнить). Допустимые типы: (уточнить).</div>
+                </div>
+                <button type="submit" class="btn btn-success">
+                    <i class="fa-solid fa-upload"></i>
+                    <span th:text="${previousResult != null ? 'Загрузить новый файл' : 'Загрузить файл'}"></span>
+                </button>
+            </div>
+
+            <div th:if="${assignment.assignmentType.name() == 'QUIZ'}">
+                <p class="text-muted">Отображение и прохождение тестов пока не реализовано.</p>
+                <button type="submit" class="btn btn-primary disabled" aria-disabled="true">Отправить ответы</button>
+            </div>
+
+        </form>
+    </div>
+
+    <div class="mt-4">
+        <a th:if="${lesson}" th:href="@{/lessons/{id}(id=${lesson.id})}" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left"></i> Вернуться к уроку
+        </a>
+    </div>
+
+</main>
+
+<div th:unless="${assignment}" class="container mt-5">
+    <div class="alert alert-danger">
+        Задание не найдено или произошла ошибка при его загрузке.
+        <a th:href="@{/courses}" class="alert-link">Вернуться к списку курсов</a>.
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
